@@ -1,6 +1,7 @@
 #include "waveguide/config.h"
 
 #include <cmath>
+#include <stdexcept>
 
 #include "samplerate.h"
 
@@ -35,7 +36,9 @@ util::aligned::vector<float> adjust_sampling_rate(const float* data,
                 "Sample rate of 0 gives few hints about how to proceed."};
     }
     const auto ratio = out_sr / in_sr;
-    util::aligned::vector<float> out_signal(ratio * size);
+    const auto output_size = static_cast<size_t>(
+            std::ceil(ratio * static_cast<double>(size)));
+    util::aligned::vector<float> out_signal(output_size);
     SRC_DATA sample_rate_info{data,
                               out_signal.data(),
                               static_cast<long>(size),
@@ -44,7 +47,13 @@ util::aligned::vector<float> adjust_sampling_rate(const float* data,
                               0,
                               0,
                               ratio};
-    src_simple(&sample_rate_info, SRC_SINC_BEST_QUALITY, 1);
+    const auto error = src_simple(&sample_rate_info, SRC_SINC_BEST_QUALITY, 1);
+    if (error != 0) {
+        throw std::runtime_error{src_strerror(error)};
+    }
+
+    out_signal.resize(
+            static_cast<size_t>(sample_rate_info.output_frames_gen));
 
     //  Correct output level.
     const auto volume_scale = 1 / ratio;
